@@ -35,7 +35,7 @@ void thread_add_runqueue(struct thread *t){
         tail->next = t;
         t->previous = tail;
         t->next = current_thread;
-        current_thread->previous = tail;
+        current_thread->previous = t;
     }
 }
 void thread_yield(void){
@@ -44,17 +44,20 @@ void thread_yield(void){
         schedule();
         dispatch();
     }
-    return;
 }
 void dispatch(void){
     if (!current_thread->buf_set) {
         // has never run before
-        current_thread->buf_set = 1;
-        current_thread->env[0].sp = (unsigned long) current_thread->stack_p;
-        current_thread->fp(current_thread->arg);
-        thread_exit();
+        if (setjmp(current_thread->env) == 0) {
+            current_thread->buf_set = 1;
+            current_thread->env[0].sp = (unsigned long)current_thread->stack_p;
+            longjmp(current_thread->env, 1);
+        } else {
+            current_thread->fp(current_thread->arg);
+            thread_exit();
+        }
     }
-    longjmp(current_thread->env, 1);
+    else longjmp(current_thread->env, 1);
 }
 void schedule(void){
     current_thread = current_thread->next;
@@ -64,9 +67,9 @@ void thread_exit(void){
         struct thread *thread_to_execute = current_thread->next; 
         current_thread->previous->next = current_thread->next;
         current_thread->next->previous = current_thread->previous;
-        current_thread = thread_to_execute;
         free(current_thread->stack);
         free(current_thread);
+        current_thread = thread_to_execute;
         dispatch();
     }
     else{
@@ -76,12 +79,10 @@ void thread_exit(void){
         longjmp(env_st, 1);
     }
 }
-void thread_start_threading(void){
-    setjmp(env_st);
-    while (current_thread != NULL) {
+void thread_start_threading(void) {
+    if (setjmp(env_st) == 0){
         dispatch();
     }
-    return;
 }
 
 // part 2
